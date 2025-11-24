@@ -11,13 +11,14 @@ SPRINT_R1_CHAINS_TO_SECOND_R2 = FALSE -- 奔跑R1连击连接到第二个R2
 BACKSTEP_R1_CHAINS_TO_SECOND_R2 = FALSE -- 后撤步R1连击连接到第二个R2
 SPRINT_R2_CHAINS_TO_SECOND_R2 = FALSE -- 奔跑R2连击连接到第二个R2
 
--- 闪避取消的宽限期（以秒为单位）。在此时间窗口内可以取消攻击进行闪避
-DODGE_CANCEL_GRACE_PERIOD = 0.5
+-- 取消的冷却时间，避免连续取消变得鬼畜
+CANCEL_GRACE_PERIOD = 0.5
 
 DODGE_CONTINUE_SPRINT = TRUE --长按闪避，会接续闪避到疾跑
+DODGE_CONTINUE_SPRINT_TIMER = 0.35 --长按闪避接续到疾跑需要的长按时间
 DODGE_CANCEL = TRUE --闪避可以取消动作
 JUMP_CANCEL = TRUE  --跳跃可以取消动作
-GUARD_CANCEL = TRUE
+GUARD_CANCEL = TRUE--防御可以取消动作
 
 -- 创建替换函数的函数
 function createReplacement(originalFunction, newFunction)
@@ -154,7 +155,7 @@ function Rolling_onUpdateCustom()
     if DODGE_CONTINUE_SPRINT == TRUE then
         if env(ActionDuration, ACTION_ARM_SP_MOVE) > 0 then
             currentHoldTime = currentHoldTime + GetDeltaTime() -- 累加按住时间
-            if currentHoldTime >= 0.35 then                -- 如果按住时间超过0.35秒
+            if currentHoldTime >= DODGE_CONTINUE_SPRINT_TIMER then                -- 如果按住时间超过设定的时间
                 --ExecEventNoReset("W_Jump_Land_To_Dash")
                 ExecEventNoReset("W_Idle")                 -- 执行空闲状态
                 SetVariable("MoveSpeedLevelReal", 2)       -- 设置移动速度等级
@@ -480,7 +481,7 @@ LastCancelRollingTime = 0
 LastCancelGuardTime = 0
 function myUpdates()
     if Game_IsPlayer() == TRUE and env(IsOnMount) == FALSE then
-        if (env(ActionDuration, ACTION_ARM_SP_MOVE) > 0) and Action_IsJumping() == FALSE and IsRollingPressed == FALSE and DODGE_CANCEL == TRUE and os.clock() - LastCancelRollingTime > DODGE_CANCEL_GRACE_PERIOD then
+        if (env(ActionDuration, ACTION_ARM_SP_MOVE) > 0) and Action_IsJumping() == FALSE and IsRollingPressed == FALSE and DODGE_CANCEL == TRUE and os.clock() - LastCancelRollingTime > CANCEL_GRACE_PERIOD then
             IsRollingPressed = TRUE
             if GetVariable("MoveSpeedLevel") > 0.05 then
                 ExecEvent("W_Rolling")
@@ -498,7 +499,7 @@ function myUpdates()
             end
             LastCancelRollingTime = os.clock()
         end
-        if (env(ActionDuration, 2) > 0) and Action_IsJumping() == FALSE and IsGuardingPressed == FALSE and GUARD_CANCEL == TRUE and os.clock() - LastCancelGuardTime > DODGE_CANCEL_GRACE_PERIOD then
+        if (env(ActionDuration, 2) > 0) and Action_IsJumping() == FALSE and IsGuardingPressed == FALSE and GUARD_CANCEL == TRUE and os.clock() - LastCancelGuardTime > CANCEL_GRACE_PERIOD then
             IsGuardingPressed = TRUE
             ExecGuard(Event_GuardStart, ALLBODY)
             LastCancelGuardTime = os.clock()
