@@ -475,6 +475,134 @@ function DoJump()
     end
 end
 
+function Action_ExecuteRoll()
+	SetWeightIndex()
+
+	local rollingEvent = "W_Rolling"
+	local is_selfTrans = FALSE
+
+	if IsNodeActive("Rolling_CMSG") == TRUE then
+		is_selfTrans = TRUE
+	end
+
+	if estep == ESTEP_DOWN then
+		rollingEvent = "W_EStepDown"
+	elseif c_IsStealth == TRUE and GetVariable("EvasionWeightIndex") ~= EVASION_WEIGHT_INDEX_OVERWEIGHT then
+		rollingEvent = "W_Stealth_Rolling"
+	elseif is_selfTrans == TRUE then
+		rollingEvent = rollingEvent .. "_Selftrans"
+	end
+
+	if GetVariable("IsEnableToggleDashTest") == 2 then
+		SetVariable("ToggleDash", 0)
+	end
+
+	local turn_angle_real = 200
+
+	if GetVariable("IsLockon") == false and env(IsPrecisionShoot) == FALSE and env(IsCOMPlayer) == FALSE or env(GetSpEffectID, 100002) == TRUE then
+		SetVariable("RollingOverweightIndex", 0)
+
+		if is_selfTrans == TRUE then
+			SetVariable("RollingDirectionIndex_SelfTrans", 0)
+		else
+			SetVariable("RollingDirectionIndex", 0)
+		end
+	elseif GetVariable("EvasionWeightIndex") == EVASION_WEIGHT_INDEX_OVERWEIGHT then
+		if c_RollingAngle <= 45 and c_RollingAngle >= -45 then
+			SetVariable("RollingOverweightIndex", 0)
+		elseif c_RollingAngle > 45 and c_RollingAngle < 135 then
+			SetVariable("RollingOverweightIndex", 3)
+		elseif c_RollingAngle >= 135 then
+			SetVariable("RollingOverweightIndex", 1)
+		elseif c_RollingAngle < -45 and c_RollingAngle > -135 then
+			SetVariable("RollingOverweightIndex", 2)
+		else
+			SetVariable("RollingOverweightIndex", 1)
+		end
+
+		act(TurnToLockonTargetImmediately)
+
+		turn_angle_real = math.abs(GetVariable("TurnAngle") - c_RollingAngle)
+
+		if turn_angle_real > 180 then
+			turn_angle_real = 360 - turn_angle_real
+		end
+	else
+		local turn_target_angle = 0
+		local rollingDirection = 0
+
+		if c_RollingAngle <= GetVariable("RollingAngleThresholdRightFrontTest") and c_RollingAngle
+			>= GetVariable("RollingAngleThresholdLeftFrontTest") then
+			rollingDirection = 0
+			turn_target_angle = c_RollingAngle
+		elseif c_RollingAngle > GetVariable("RollingAngleThresholdRightFrontTest") and c_RollingAngle
+			< GetVariable("RollingAngleThresholdRightBackTest") then
+			rollingDirection = 3
+			turn_target_angle = c_RollingAngle - 90
+		elseif c_RollingAngle < GetVariable("RollingAngleThresholdLeftFrontTest") and c_RollingAngle
+			> GetVariable("RollingAngleThresholdLeftBackTest") then
+			rollingDirection = 2
+			turn_target_angle = c_RollingAngle + 90
+		else
+			rollingDirection = 1
+			turn_target_angle = c_RollingAngle - 180
+		end
+
+		if is_selfTrans == TRUE then
+			SetVariable("RollingDirectionIndex_SelfTrans", rollingDirection)
+		else
+			SetVariable("RollingDirectionIndex", rollingDirection)
+		end
+
+		if GetVariable("IsLockon") == true then
+			act(TurnToLockonTargetImmediately, turn_target_angle)
+		else
+			act(FaceDirection, turn_target_angle)
+		end
+
+		turn_angle_real = math.abs(GetVariable("TurnAngle") - c_RollingAngle)
+
+		if turn_angle_real > 180 then
+			turn_angle_real = 360 - turn_angle_real
+		end
+	end
+
+	SetVariable("TurnAngleReal", turn_angle_real)
+
+	if is_selfTrans == TRUE then
+		SetVariable("RollingAngleRealSelftrans", c_RollingAngle)
+	else
+		SetVariable("RollingAngleReal", c_RollingAngle)
+	end
+
+	ExecEventAllBody(rollingEvent)
+
+	if GetVariable("IsEnableToggleDashTest") == 2 then
+		SetVariable("ToggleDash", 0)
+	end
+
+	act(SetNpcAIAttackRequestIDAfterBlend, env(GetNpcAIAttackRequestID))
+	SetAIActionState()
+end
+
+function Action_ExecuteBackstep()
+    -- 简化版的Action_Backstep
+    if IsEnableGuard() == TRUE and IsGuard() == TRUE then
+        SetVariable("BackStepGuardLayer", 1)
+        SetVariable("EnableTAE_BackStep", false)
+        ExecEvent("W_DefaultBackStep")
+        ExecEvent("W_BackStepGuardOn_UpperLayer")
+    else
+        SetVariable("BackStepGuardLayer", 0)
+        SetVariable("EnableTAE_BackStep", true)
+        ExecEventAllBody("W_DefaultBackStep")
+    end
+
+    -- 设置AI状态
+    act(SetNpcAIAttackRequestIDAfterBlend, env(GetNpcAIAttackRequestID))
+    SetAIActionState()
+end
+
 IsRollingPressed = FALSE
 IsGuardingPressed = FALSE
 LastCancelRollingTime = 0
@@ -483,19 +611,13 @@ function myUpdates()
     if Game_IsPlayer() == TRUE and env(IsOnMount) == FALSE then
         if (env(ActionDuration, ACTION_ARM_SP_MOVE) > 0) and Action_IsJumping() == FALSE and IsRollingPressed == FALSE and DODGE_CANCEL == TRUE and os.clock() - LastCancelRollingTime > CANCEL_GRACE_PERIOD then
             IsRollingPressed = TRUE
-            if GetVariable("MoveSpeedLevel") > 0.05 then
-                ExecEvent("W_Rolling")
-            else
-                if IsEnableGuard() == TRUE and IsGuard() == TRUE then
-                    SetVariable("BackStepGuardLayer", 1)
-                    SetVariable("EnableTAE_BackStep", false)
-                    ExecEvent("W_DefaultBackStep")
-                    ExecEvent("W_BackStepGuardOn_UpperLayer")
-                else
-                    SetVariable("BackStepGuardLayer", 0)
-                    SetVariable("EnableTAE_BackStep", true)
-                    ExecEventAllBody("W_DefaultBackStep")
+            if GetVariable("MoveSpeedLevel") > 0.05 or GetLocomotionState() == PLAYER_STATE_MOVE then
+                Action_ExecuteRoll()
+                if env(1116, 102360) == FALSE then
+                    AddStamina(STAMINA_REDUCE_ROLLING)
                 end
+            else
+                Action_ExecuteBackstep()
             end
             LastCancelRollingTime = os.clock()
         end
